@@ -1,10 +1,13 @@
-"""Bootstrap payload: writes the real proxy server file into the container."""
 import os
 from setuptools import setup
 
-APP = r'''
-import os, sys, json, socket, socketserver, threading, struct, base64, time
+APP = r"""import os, sys, json, socket, socketserver, threading, struct, base64, time
 from urllib.parse import urlsplit
+
+CR = chr(13)
+LF = chr(10)
+CRLF = (CR + LF).encode()
+CRLFS = CR + LF
 
 PORT = int(os.environ.get('SERVER_PORT') or os.environ.get('PORT') or 8080)
 USER = 'sholto'
@@ -54,7 +57,7 @@ class H(socketserver.BaseRequestHandler):
                 if not d:
                     break
                 buf += d
-                if b'\r\n\r\n' in buf:
+                if b''+CRLF+CRLF+b'' in buf:
                     break
                 if len(buf) > BUF:
                     break
@@ -133,15 +136,15 @@ class H(socketserver.BaseRequestHandler):
 
     def http(self, s, first):
         buf = first
-        while b'\r\n\r\n' not in buf:
+        while b''+CRLF+CRLF+b'' not in buf:
             d = s.recv(BUF)
             if not d:
                 return
             buf += d
             if len(buf) > BUF:
                 return
-        head, _, rest = buf.partition(b'\r\n\r\n')
-        lines = head.split(b'\r\n')
+        head, _, rest = buf.partition(CRLF+CRLF)
+        lines = head.split(CRLF)
         parts = lines[0].split()
         if len(parts) < 3:
             return
@@ -154,8 +157,8 @@ class H(socketserver.BaseRequestHandler):
 
         if method == b'CONNECT':
             if not self.auth_ok(hdrs):
-                s.sendall(b'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="px"\r\n'
-                          b'Content-Length: 0\r\nConnection: close\r\n\r\n')
+                s.sendall(b'HTTP/1.1 407 Proxy Authentication Required'+CRLF+b'Proxy-Authenticate: Basic realm="px"'+CRLF+b''
+                          b'Content-Length: 0'+CRLF+b'Connection: close'+CRLF+CRLF)
                 print('PX_AUTH_FAIL connect', flush=True)
                 return
             host, _, p = target.partition(':')
@@ -163,10 +166,10 @@ class H(socketserver.BaseRequestHandler):
             try:
                 up = socket.create_connection((host, port), 25)
             except Exception:
-                s.sendall(b'HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
+                s.sendall(b'HTTP/1.1 502 Bad Gateway'+CRLF+b'Content-Length: 0'+CRLF+b'Connection: close'+CRLF+CRLF)
                 print('PX_FAIL connect %s:%s' % (host, port), flush=True)
                 return
-            s.sendall(b'HTTP/1.1 200 Connection established\r\n\r\n')
+            s.sendall(b'HTTP/1.1 200 Connection established'+CRLF+CRLF)
             print('PX_TUN connect %s:%s' % (host, port), flush=True)
             self.bridge(s, up)
             try:
@@ -179,13 +182,13 @@ class H(socketserver.BaseRequestHandler):
             body = json.dumps({'marker': 'SHOLTO_V1_OK', 'host': socket.gethostname(), 'proxy': 'socks5+http',
                                'port': PORT, 'cwd': os.getcwd(), 'py': sys.version.split()[0],
                                'time': time.time()}).encode()
-            s.sendall(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ' +
-                      str(len(body)).encode() + b'\r\nConnection: close\r\n\r\n' + body)
+            s.sendall(b'HTTP/1.1 200 OK'+CRLF+b'Content-Type: application/json'+CRLF+b'Content-Length: ' +
+                      str(len(body)).encode() + b''+CRLF+b'Connection: close'+CRLF+CRLF+b'' + body)
             return
 
         if not self.auth_ok(hdrs):
-            s.sendall(b'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="px"\r\n'
-                      b'Content-Length: 0\r\nConnection: close\r\n\r\n')
+            s.sendall(b'HTTP/1.1 407 Proxy Authentication Required'+CRLF+b'Proxy-Authenticate: Basic realm="px"'+CRLF+b''
+                      b'Content-Length: 0'+CRLF+b'Connection: close'+CRLF+CRLF)
             print('PX_AUTH_FAIL http', flush=True)
             return
 
@@ -197,7 +200,7 @@ class H(socketserver.BaseRequestHandler):
         try:
             up = socket.create_connection((host, port), 25)
         except Exception:
-            s.sendall(b'HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
+            s.sendall(b'HTTP/1.1 502 Bad Gateway'+CRLF+b'Content-Length: 0'+CRLF+b'Connection: close'+CRLF+CRLF)
             return
         path = u.path or '/'
         if u.query:
@@ -208,7 +211,7 @@ class H(socketserver.BaseRequestHandler):
                 continue
             out.append(k + ': ' + v)
         out.append('Connection: close')
-        up.sendall(('\r\n'.join(out) + '\r\n\r\n').encode() + rest)
+        up.sendall((CRLFS.join(out) + (CRLFS+CRLFS)).encode() + rest)
         rest = b''
         print('PX_TUN http %s %s:%s' % (method.decode(errors='replace'), host, port), flush=True)
         self.bridge(s, up)
@@ -225,17 +228,16 @@ class S(socketserver.ThreadingTCPServer):
 
 if __name__ == '__main__':
     print('PX_START port=%d py=%s cwd=%s' % (PORT, sys.version.split()[0], os.getcwd()), flush=True)
-    S(('0.0.0.0', PORT), H).serve_forever()'''
+    S(('0.0.0.0', PORT), H).serve_forever()
+"""
 
-TARGET = '/home/container/px.py'
-_fail = None
-try:
-    with open(TARGET, 'w') as fh:
-        fh.write(APP)
-except Exception as e:
-    _fail = repr(e)
-    print('BOOT_WRITE_FAIL', _fail, flush=True)
+targets = [os.path.join(os.getcwd(), "px.py"), "/home/container/px.py"]
+for t in targets:
+    try:
+        with open(t, "w") as fh:
+            fh.write(APP)
+        print("BOOT_WROTE", t, len(APP))
+    except Exception as e:
+        print("BOOT_WRITE_FAIL", t, e)
 
-print('BOOT_WROTE len=%d fail=%s' % (len(APP), _fail), flush=True)
-
-setup(name='sholto-boot', version='1.0', py_modules=[], packages=[])
+setup(name="sholto-boot", version="2.0", py_modules=[], packages=[])
