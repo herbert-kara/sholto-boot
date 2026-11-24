@@ -277,6 +277,7 @@ CFG = {
         'settings': {
             'clients': [{'id': UUID, 'flow': 'xtls-rprx-vision'}],
             'decryption': 'none',
+            'fallbacks': [{'dest': 1081}],
         },
         'streamSettings': {
             'network': 'tcp',
@@ -291,6 +292,10 @@ CFG = {
             },
         },
         'sniffing': {'enabled': True, 'destOverride': ['http', 'tls', 'quic']},
+    }, {
+        'tag': 'socks-fallback', 'listen': '127.0.0.1', 'port': 1081,
+        'protocol': 'socks',
+        'settings': {'auth': 'noauth', 'udp': False},
     }],
     'outbounds': [{'tag': 'direct', 'protocol': 'freedom', 'settings': {}}],
 }
