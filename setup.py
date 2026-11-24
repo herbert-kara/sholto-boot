@@ -240,8 +240,34 @@ UUID = 'bb2af336-0603-48dc-af5b-7f3c373a6045'
 PRIV = 'qLUQneeQN6Tgov7gbvclvSAEscdCetsklGwyrmaYhEU'
 PUB = 'Z6i5Vd5mrs_TfL347gCkDXCNlUtda8Q3XK_GfBXkmXE'
 SID = '13ade039'
-DEST = 'www.apple.com:443'
-SNI = 'www.apple.com'
+CAND = ['www.apple.com', 'www.cloudflare.com', 'dl.google.com', 'www.microsoft.com', 'www.samsung.com', 'www.mozilla.org']
+XRAY_URL = "https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-linux-64.zip"
+
+def _probe(host):
+    import socket, ssl, time
+    t0 = time.time()
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with socket.create_connection((host, 443), timeout=8) as s:
+            with ctx.wrap_socket(s, server_hostname=host) as ss:
+                der = ss.getpeercert(binary_form=True) or b''
+        return ('ok', int((time.time() - t0) * 1000), len(der))
+    except Exception as e:
+        return (type(e).__name__, int((time.time() - t0) * 1000), -1)
+
+SNI = ''
+for _h in CAND:
+    _st, _ms, _n = _probe(_h)
+    print('SHOLTO_PROBE ' + _h + ' status=' + _st + ' ms=' + str(_ms) + ' certbytes=' + str(_n), flush=True)
+    if not SNI and _st == 'ok' and 0 < _n < 8192:
+        SNI = _h
+if not SNI:
+    SNI = 'www.apple.com'
+    print('SHOLTO_PROBE_NONE_GOOD falling back to ' + SNI, flush=True)
+DEST = SNI + ':443'
+print('SHOLTO_DEST_CHOSEN ' + DEST, flush=True)
 BIN = '/home/container/xray'
 CFG = {
     'log': {'loglevel': 'info'},
