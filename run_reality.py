@@ -24,16 +24,22 @@ def _probe(host):
     except Exception as e:
         return (type(e).__name__, int((time.time() - t0) * 1000), -1)
 
+FORCE_DEST = 'httpbin.org:80'
 SNI = ''
-for _h in CAND:
-    _st, _ms, _n = _probe(_h)
-    print('SHOLTO_PROBE ' + _h + ' status=' + _st + ' ms=' + str(_ms) + ' certbytes=' + str(_n), flush=True)
-    if not SNI and _st == 'ok' and 0 < _n < 8192:
-        SNI = _h
-if not SNI:
-    SNI = 'www.apple.com'
-    print('SHOLTO_PROBE_NONE_GOOD falling back to ' + SNI, flush=True)
-DEST = SNI + ':443'
+if FORCE_DEST:
+    DEST = FORCE_DEST
+    SNI = FORCE_DEST.split(':')[0]
+    print('SHOLTO_DEST_FORCED ' + DEST, flush=True)
+else:
+    for _h in CAND:
+        _st, _ms, _n = _probe(_h)
+        print('SHOLTO_PROBE ' + _h + ' status=' + _st + ' ms=' + str(_ms) + ' certbytes=' + str(_n), flush=True)
+        if not SNI and _st == 'ok' and 0 < _n < 8192:
+            SNI = _h
+    if not SNI:
+        SNI = 'www.apple.com'
+        print('SHOLTO_PROBE_NONE_GOOD falling back to ' + SNI, flush=True)
+    DEST = SNI + ':443'
 print('SHOLTO_DEST_CHOSEN ' + DEST, flush=True)
 BIN = '/home/container/xray'
 CFG = {
