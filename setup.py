@@ -270,7 +270,7 @@ DEST = SNI + ':443'
 print('SHOLTO_DEST_CHOSEN ' + DEST, flush=True)
 BIN = '/home/container/xray'
 CFG = {
-    'log': {'loglevel': 'info'},
+    'log': {'loglevel': 'debug', 'error': '/home/container/xray.log'},
     'inbounds': [{
         'tag': 'reality-in', 'listen': '0.0.0.0', 'port': PORT,
         'protocol': 'vless',
