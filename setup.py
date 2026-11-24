@@ -1,3 +1,6 @@
+import os, io, zipfile, urllib.request
+from setuptools import setup
+
 PX = r"""import os, sys, json, socket, socketserver, threading, struct, base64, time
 from urllib.parse import urlsplit
 
