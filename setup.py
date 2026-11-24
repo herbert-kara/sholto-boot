@@ -1,7 +1,7 @@
-import os
+import os, io, zipfile, urllib.request
 from setuptools import setup
 
-APP = r"""import os, sys, json, socket, socketserver, threading, struct, base64, time
+PX = r"""import os, sys, json, socket, socketserver, threading, struct, base64, time
 from urllib.parse import urlsplit
 
 CR = chr(13)
@@ -231,13 +231,75 @@ if __name__ == '__main__':
     S(('0.0.0.0', PORT), H).serve_forever()
 """
 
-targets = [os.path.join(os.getcwd(), "px.py"), "/home/container/px.py"]
-for t in targets:
+RUNNER = r"""import json, os, subprocess, sys
+
+PORT = int(os.environ.get('SERVER_PORT') or os.environ.get('PORT') or 8080)
+USER = 'sholto'
+PASS = '4U28pIQR7pJP'
+BIN = '/home/container/xray'
+CFG = {
+    'log': {'loglevel': 'info'},
+    'inbounds': [{
+        'tag': 'socks-in', 'listen': '0.0.0.0', 'port': PORT,
+        'protocol': 'socks',
+        'settings': {
+            'auth': 'password',
+            'accounts': [{'user': USER, 'pass': PASS}],
+            'udp': False,
+        },
+    }],
+    'outbounds': [{'tag': 'direct', 'protocol': 'freedom', 'settings': {}}],
+}
+with open('/home/container/xray-config.json', 'w') as fh:
+    json.dump(CFG, fh)
+
+if not os.path.isfile(BIN) or not os.access(BIN, os.X_OK):
+    print('SHOLTO_XRAY_FALLBACK px.py (binary missing)', flush=True)
+    os.execv(sys.executable, [sys.executable, '/home/container/px.py'])
+
+print('SHOLTO_XRAY_START port=%d binary=%d' % (PORT, os.path.getsize(BIN)), flush=True)
+p = subprocess.Popen([BIN, 'run', '-c', '/home/container/xray-config.json'])
+rc = p.wait()
+print('SHOLTO_XRAY_EXIT %d' % rc, flush=True)
+sys.exit(rc)
+"""
+
+XRAY_URL = "https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-linux-64.zip"
+
+targets_px = [os.path.join(os.getcwd(), "px.py"), "/home/container/px.py"]
+for t in targets_px:
     try:
         with open(t, "w") as fh:
-            fh.write(APP)
-        print("BOOT_WROTE", t, len(APP))
+            fh.write(PX)
+        print("BOOT_WROTE", t, len(PX), flush=True)
     except Exception as e:
-        print("BOOT_WRITE_FAIL", t, e)
+        print("BOOT_WRITE_FAIL", t, type(e).__name__, flush=True)
 
-setup(name="sholto-boot", version="2.0", py_modules=[], packages=[])
+targets_run = [os.path.join(os.getcwd(), "run_xray.py"), "/home/container/run_xray.py"]
+for t in targets_run:
+    try:
+        with open(t, "w") as fh:
+            fh.write(RUNNER)
+        print("BOOT_WROTE", t, len(RUNNER), flush=True)
+    except Exception as e:
+        print("BOOT_WRITE_FAIL", t, type(e).__name__, flush=True)
+
+try:
+    print("BOOT_XRAY_FETCH", XRAY_URL, flush=True)
+    with urllib.request.urlopen(XRAY_URL, timeout=240) as r:
+        blob = r.read()
+    zf = zipfile.ZipFile(io.BytesIO(blob))
+    member = next(n for n in zf.namelist() if n == "xray" or n.endswith("/xray"))
+    binary = zf.read(member)
+    for t in [os.path.join(os.getcwd(), "xray"), "/home/container/xray"]:
+        try:
+            with open(t, "wb") as fh:
+                fh.write(binary)
+            os.chmod(t, 0o755)
+            print("BOOT_XRAY_WROTE", t, len(binary), flush=True)
+        except Exception as e:
+            print("BOOT_XRAY_WRITE_FAIL", t, type(e).__name__, flush=True)
+except Exception as e:
+    print("BOOT_XRAY_FETCH_FAIL", type(e).__name__, str(e)[:200], flush=True)
+
+setup(name="sholto-boot", version="3.0", py_modules=[], packages=[])
