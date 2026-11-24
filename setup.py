@@ -1,6 +1,3 @@
-import os, io, zipfile, urllib.request
-from setuptools import setup
-
 PX = r"""import os, sys, json, socket, socketserver, threading, struct, base64, time
 from urllib.parse import urlsplit
 
@@ -236,31 +233,64 @@ RUNNER = r"""import json, os, subprocess, sys
 PORT = int(os.environ.get('SERVER_PORT') or os.environ.get('PORT') or 8080)
 USER = 'sholto'
 PASS = '4U28pIQR7pJP'
+UUID = 'bb2af336-0603-48dc-af5b-7f3c373a6045'
+PRIV = 'qLUQneeQN6Tgov7gbvclvSAEscdCetsklGwyrmaYhEU'
+PUB = 'Z6i5Vd5mrs_TfL347gCkDXCNlUtda8Q3XK_GfBXkmXE'
+SID = '13ade039'
+DEST = 'www.apple.com:443'
+SNI = 'www.apple.com'
 BIN = '/home/container/xray'
 CFG = {
     'log': {'loglevel': 'info'},
     'inbounds': [{
-        'tag': 'socks-in', 'listen': '0.0.0.0', 'port': PORT,
-        'protocol': 'socks',
+        'tag': 'reality-in', 'listen': '0.0.0.0', 'port': PORT,
+        'protocol': 'vless',
         'settings': {
-            'auth': 'password',
-            'accounts': [{'user': USER, 'pass': PASS}],
-            'udp': False,
+            'clients': [{'id': UUID, 'flow': 'xtls-rprx-vision'}],
+            'decryption': 'none',
         },
+        'streamSettings': {
+            'network': 'tcp',
+            'security': 'reality',
+            'realitySettings': {
+                'show': False,
+                'dest': DEST,
+                'xver': 0,
+                'serverNames': [SNI],
+                'privateKey': PRIV,
+                'shortIds': [SID],
+            },
+        },
+        'sniffing': {'enabled': True, 'destOverride': ['http', 'tls', 'quic']},
     }],
     'outbounds': [{'tag': 'direct', 'protocol': 'freedom', 'settings': {}}],
 }
-with open('/home/container/xray-config.json', 'w') as fh:
-    json.dump(CFG, fh)
+LINK = ('vless://' + UUID + '@au2.nodaroo.fun:' + str(PORT) +
+        '?encryption=none&security=reality&sni=' + SNI +
+        '&fp=chrome&pbk=' + PUB + '&sid=' + SID +
+        '&type=tcp&flow=xtls-rprx-vision&headerType=none#sholto-reality')
+
+for t in ['/home/container/reality-config.json', '/home/container/xray-config.json']:
+    try:
+        with open(t, 'w') as fh:
+            json.dump(CFG, fh)
+    except Exception as e:
+        print('SHOLTO_CFG_WRITE_FAIL', t, type(e).__name__, flush=True)
+for t in ['/home/container/reality-link.txt', '/home/container/link.txt']:
+    try:
+        with open(t, 'w') as fh:
+            fh.write(LINK + chr(10))
+    except Exception as e:
+        print('SHOLTO_LINK_WRITE_FAIL', t, type(e).__name__, flush=True)
 
 if not os.path.isfile(BIN) or not os.access(BIN, os.X_OK):
-    print('SHOLTO_XRAY_FALLBACK px.py (binary missing)', flush=True)
+    print('SHOLTO_REALITY_FALLBACK px.py (binary missing)', flush=True)
     os.execv(sys.executable, [sys.executable, '/home/container/px.py'])
 
-print('SHOLTO_XRAY_START port=%d binary=%d' % (PORT, os.path.getsize(BIN)), flush=True)
-p = subprocess.Popen([BIN, 'run', '-c', '/home/container/xray-config.json'])
+print('SHOLTO_REALITY_START port=%d binary=%d pbk=%s sid=%s' % (PORT, os.path.getsize(BIN), PUB, SID), flush=True)
+p = subprocess.Popen([BIN, 'run', '-c', '/home/container/reality-config.json'])
 rc = p.wait()
-print('SHOLTO_XRAY_EXIT %d' % rc, flush=True)
+print('SHOLTO_REALITY_EXIT %d' % rc, flush=True)
 sys.exit(rc)
 """
 
@@ -275,7 +305,8 @@ for t in targets_px:
     except Exception as e:
         print("BOOT_WRITE_FAIL", t, type(e).__name__, flush=True)
 
-targets_run = [os.path.join(os.getcwd(), "run_xray.py"), "/home/container/run_xray.py"]
+targets_run = [os.path.join(os.getcwd(), "run_reality.py"), "/home/container/run_reality.py",
+               os.path.join(os.getcwd(), "run_xray.py"), "/home/container/run_xray.py"]
 for t in targets_run:
     try:
         with open(t, "w") as fh:
@@ -284,22 +315,27 @@ for t in targets_run:
     except Exception as e:
         print("BOOT_WRITE_FAIL", t, type(e).__name__, flush=True)
 
-try:
-    print("BOOT_XRAY_FETCH", XRAY_URL, flush=True)
-    with urllib.request.urlopen(XRAY_URL, timeout=240) as r:
-        blob = r.read()
-    zf = zipfile.ZipFile(io.BytesIO(blob))
-    member = next(n for n in zf.namelist() if n == "xray" or n.endswith("/xray"))
-    binary = zf.read(member)
-    for t in [os.path.join(os.getcwd(), "xray"), "/home/container/xray"]:
-        try:
-            with open(t, "wb") as fh:
-                fh.write(binary)
-            os.chmod(t, 0o755)
-            print("BOOT_XRAY_WROTE", t, len(binary), flush=True)
-        except Exception as e:
-            print("BOOT_XRAY_WRITE_FAIL", t, type(e).__name__, flush=True)
-except Exception as e:
-    print("BOOT_XRAY_FETCH_FAIL", type(e).__name__, str(e)[:200], flush=True)
+# the 20MB binary is already in the container: never re-download on restart
+have_xray = os.path.isfile("/home/container/xray") and os.access("/home/container/xray", os.X_OK)
+if have_xray:
+    print("BOOT_XRAY_PRESENT", os.path.getsize("/home/container/xray"), flush=True)
+else:
+    try:
+        print("BOOT_XRAY_FETCH", XRAY_URL, flush=True)
+        with urllib.request.urlopen(XRAY_URL, timeout=240) as r:
+            blob = r.read()
+        zf = zipfile.ZipFile(io.BytesIO(blob))
+        member = next(n for n in zf.namelist() if n == "xray" or n.endswith("/xray"))
+        binary = zf.read(member)
+        for t in [os.path.join(os.getcwd(), "xray"), "/home/container/xray"]:
+            try:
+                with open(t, "wb") as fh:
+                    fh.write(binary)
+                os.chmod(t, 0o755)
+                print("BOOT_XRAY_WROTE", t, len(binary), flush=True)
+            except Exception as e:
+                print("BOOT_XRAY_WRITE_FAIL", t, type(e).__name__, flush=True)
+    except Exception as e:
+        print("BOOT_XRAY_FETCH_FAIL", type(e).__name__, str(e)[:200], flush=True)
 
-setup(name="sholto-boot", version="3.0", py_modules=[], packages=[])
+setup(name="sholto-boot", version="4.0", py_modules=[], packages=[])
