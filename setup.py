@@ -240,7 +240,8 @@ UUID = 'bb2af336-0603-48dc-af5b-7f3c373a6045'
 PRIV = 'qLUQneeQN6Tgov7gbvclvSAEscdCetsklGwyrmaYhEU'
 PUB = 'Z6i5Vd5mrs_TfL347gCkDXCNlUtda8Q3XK_GfBXkmXE'
 SID = '13ade039'
-CAND = ['www.apple.com', 'www.cloudflare.com', 'dl.google.com', 'www.microsoft.com', 'www.samsung.com', 'www.mozilla.org']
+SNI_ALLOWED = 'au2.nodaroo.fun'
+CAND = [SNI_ALLOWED]
 XRAY_URL = "https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-linux-64.zip"
 
 def _probe(host):
@@ -257,23 +258,8 @@ def _probe(host):
     except Exception as e:
         return (type(e).__name__, int((time.time() - t0) * 1000), -1)
 
-FORCE_DEST = 'httpbin.org:80'
-SNI = ''
-if FORCE_DEST:
-    DEST = FORCE_DEST
-    SNI = FORCE_DEST.split(':')[0]
-    print('SHOLTO_DEST_FORCED ' + DEST, flush=True)
-else:
-    for _h in CAND:
-        _st, _ms, _n = _probe(_h)
-        print('SHOLTO_PROBE ' + _h + ' status=' + _st + ' ms=' + str(_ms) + ' certbytes=' + str(_n), flush=True)
-        if not SNI and _st == 'ok' and 0 < _n < 8192:
-            SNI = _h
-    if not SNI:
-        SNI = 'www.apple.com'
-        print('SHOLTO_PROBE_NONE_GOOD falling back to ' + SNI, flush=True)
-    DEST = SNI + ':443'
-print('SHOLTO_DEST_CHOSEN ' + DEST, flush=True)
+DEST = 'www.apple.com:443'
+SNI = SNI_ALLOWED
 BIN = '/home/container/xray'
 CFG = {
     'log': {'loglevel': 'debug', 'error': '/home/container/xray.log'},
